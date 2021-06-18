@@ -1,5 +1,6 @@
 from os import path
 from sql import calls as sql
+from sql import auth as sql2
 from pyrogram import Client, filters
 from pyrogram.types import Message, Voice
 from youtube_search import YoutubeSearch 
@@ -15,7 +16,7 @@ from helpers.decorators import authorized_users_only
 from helpers.decorators import authorized_users_only2
 from helpers.errors import DurationLimitError
 from helpers.gets import get_url, get_file_name
-from config import API_ID, API_HASH, BOT_TOKEN, PLAY_PIC, BOT_USERNAME, OWNER_ID 
+from config import API_ID, API_HASH, BOT_TOKEN, PLAY_PIC, BOT_USERNAME, OWNER_ID, UBOT_ID
 import time 
 from config import START_TIME as st
 quu = {} 
@@ -24,7 +25,7 @@ quu = {}
 @errors
 async def selfwelc(client: Client, message: Message):
   for user in message.new_chat_members:
-    if user.id == 1704447681:
+    if user.id == int(UBOT_ID):
       await message.reply_text("Demmm kek, a new adventure, can't wait to tell Abhi-sama")
       chat_name = message.chat.title
       get = await client.get_chat(message.chat.id)
@@ -52,7 +53,7 @@ async def que(client: Client, message: Message):
       tex +=  "•" 
       tex += i 
       if i == why[0]:
-        tex += "**`(playin now)`**"
+        tex += "`(playin now)`"
       tex += "\n\n"
       count += 1
     print(tex)
@@ -109,7 +110,7 @@ async def showplay(_, message: Message):
   if not sql.is_call(message.chat.id):
     return await message.reply("Nuthin playin...")
   song = quu[message.chat.id][0]
-  await message.reply(f"**Now playin in {message.chat.title}\n{song}**")
+  await message.reply(f"**Now playin in {message.chat.title}\n\n{song}**")
   
 @Client.on_message(filters.command(["start", f"start@{BOT_USERNAME}"]) & other_filters)
 @errors
@@ -123,11 +124,24 @@ async def helpgrp(_, message: Message):
   markup = InlineKeyboardMarkup([[InlineKeyboardButton(text = "Help", url = f"t.me/{BOT_USERNAME}?start=help")]])
   await message.reply_text("Yess!!, get to know me in my pm!", reply_markup = markup)
 
-@Client.on_message(filters.command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
+def erro(mid, fp, ru):
+  sql.set_off(mid)
+  global quu
+  try: 
+    callsmusic.pytgcalls.join_group_call(mid, fp)
+  except Exception:
+    return False
+  sql.set_on(mid)
+  quu[mid] = [ru]
+  return True
+ 
+
+@Client.on_message(filters.command(["play", f"play@{BOT_USERNAME}", "playlist", f"playlist@{BOT_USERNAME}"]) & other_filters)
 @errors
 @authorized_users_only2
 async def play(_, message: Message):
     audio = (message.reply_to_message.audio or message.reply_to_message.voice) if message.reply_to_message else None
+    req_name = f"Requested By: {message.from_user.first_name}\n"
     req_user = f"Requested By: [{message.from_user.first_name}](tg://user?id={message.from_user.id})\n"
     url = get_url(message)
     me = message.text.split(None, 1)
@@ -141,9 +155,7 @@ async def play(_, message: Message):
     m = await message.reply_text("Wait-a-min....(^_-)")
     if audio:
         if round(audio.duration / 60) > DURATION_LIMIT:
-            raise DurationLimitError(
-                f"Videos longer than {DURATION_LIMIT} minute(s) aren't allowed!\n🤐 The provided video is {audio.duration / 60} minute(s)"
-            )
+          raise DurationLimitError(f"Videos longer than {DURATION_LIMIT} minute(s) aren't allowed!\n🤐 The provided video is {audio.duration / 60} minute(s)")
 
         file_name = get_file_name(audio)
         text += f"**Playin[...]({PLAY_PIC})\n"
@@ -173,13 +185,13 @@ async def play(_, message: Message):
         except AttributeError:
           tum = thumb 
         text += f"\n**{title}[..]({tum})**"
-        ruuta += title
         duration = results[0]["duration"]
         text += f"\n**Duration: {str(duration)}**"
         #channel = results[0]["channel"]
         # += f"\n**Artist: {channel}**"
         text += f"\n**{req_user}**"
         file_path = await converter.convert(youtube.download(url))
+        ruuta += f"{title}\nDuration: {duration}\n{req_name}"
     elif not args == "None":
         results = []
         count = 0
@@ -201,13 +213,13 @@ async def play(_, message: Message):
         except AttributeError:
           tum = thumb
         text += f"\n**{title}[..]({tum})**"
-        ruuta += title 
         duration = results[0]["duration"]
         text += f"\n**Duration: {str(duration)}**"
         await m.edit("Processing...just-a-sec..")
         #channel = results[0]["channel"]
         #text += f"\n**Artist: {channel}**"
         text += f"\n**{req_user}**"
+        ruuta += f"{title}\nDuration: {duration}\n{req_name}"
     else:
       await m.delete()
       markup = InlineKeyboardMarkup([[(InlineKeyboardButton("Search And Play ", switch_inline_query_current_chat = ""))]])
@@ -216,7 +228,17 @@ async def play(_, message: Message):
 
     if sql.is_call(message.chat.id):
         global quu
-        quu[message.chat.id].append(ruuta)
+        try:
+          quu[message.chat.id].append(ruuta)
+        except KeyError:
+          m = erro(message.chat.id, file_path, rutta)
+          if m is True:
+            await m.delete()
+            await message.reply(text, reply_markup = markup)
+            return 
+          else: 
+            await message.reply("Ahh!! Looks like some error occurred, check if vc is on")
+            return
         text += f"**\nQueued at position #{await callsmusic.queues.put(message.chat.id, file_path=file_path)} !**"
         await m.delete()
         await message.reply_text(text, parse_mode = "md", reply_markup = markup) 
@@ -225,7 +247,7 @@ async def play(_, message: Message):
           callsmusic.pytgcalls.join_group_call(message.chat.id, file_path, 48000)
         except Exception:
           await m.delete()
-          await message.reply("Looks like the group vc call is not on or userbot is not here, use /summon to summon the userbot")
+          await message.reply("Looks like the group vc call is not on")
           return 
         sql.set_on(message.chat.id)
         await m.delete()

@@ -21,6 +21,11 @@
       "description": "A bot token from @BotFather",
       "required": true
     },
+    "BOT_NAME": {
+      "description": "The bot name you want",
+      "required": "false",
+      "value": "Ohto-Clone"
+    },
     "BOT_USERNAME": {
       "description": "Your Bot username without @, this is fcking necessary, if it doesn't matches bot username u won't be able to use inline", 
       "required": true
@@ -37,9 +42,9 @@
       "description": "The bot owner id, it will send a message to your pm everytime someone adds bot", 
       "required": true
     },
-    "USERBOT_ID": {
-      "description": "this will be used to invite the userbot which will play", 
-      "required": true
+    "BOT_ID": {
+      "description": "needed to notify owner when bot is added in some group",
+      "required": false
     }, 
     "START_PIC": {
       "description": "The pic to show in the start message, if not set default ohto-kun pic will be used", 
