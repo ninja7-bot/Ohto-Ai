@@ -4,9 +4,11 @@ from sql import auth as sql2
 from pyrogram import Client, filters
 from pyrogram.types import Message, Voice
 from youtube_search import YoutubeSearch 
+from callsmusic import mp, quu, block_chat
 import callsmusic
 import converter
-from pyrogram.errors import PeerIdInvalid
+from pyrogram.errors import PeerIdInvalid, ChannelInvalid
+from pyrogram.errors import exceptions
 from downloaders import youtube
 from pyrogram.types import (InlineKeyboardMarkup, InlineKeyboardButton)
 from config import BOT_NAME as bn, DURATION_LIMIT
@@ -18,9 +20,10 @@ from helpers.errors import DurationLimitError
 from helpers.gets import get_url, get_file_name
 from config import API_ID, API_HASH, BOT_TOKEN, PLAY_PIC, BOT_USERNAME, OWNER_ID, UBOT_ID
 import time 
+import config
 from config import START_TIME as st
 
-quu = {} 
+quu = quu
 
 sleep_time = 3
 
@@ -29,7 +32,10 @@ sleep_time = 3
 async def selfwelc(client: Client, message: Message):
   for user in message.new_chat_members:
     if user.id == int(UBOT_ID):
-      await message.reply_text("Demmm kek, a new adventure, can't wait to tell Abhi-sama")
+      if config.SUMMONER == 'False':
+        await message.reply_text("Demmm kek, a new adventure, can't wait to tell Abhi-sama")
+      else:
+        await message. reply_text("Ahk sorry, imma private bot! Deploy one!")
       chat_name = message.chat.title
       get = await client.get_chat(message.chat.id)
       if get.username:
@@ -57,7 +63,7 @@ async def que(client: Client, message: Message):
   count = 0
   if len(why) >= 1:
     for i in why:
-      tex +=  "•" 
+      tex +=  str(count)
       tex += i 
       if i == why[0]:
         tex += "`(playin now)`"
@@ -156,11 +162,21 @@ def erro(mid, fp, ru):
   return True
  
 
-@Client.on_message(filters.command(["play", f"play@{BOT_USERNAME}", "playlist", f"playlist@{BOT_USERNAME}"]) & other_filters)
+@Client.on_message(filters.command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
 @errors
 @authorized_users_only2
 async def play(_, message: Message):
+    if message.chat.id in block_chat:
+      return await message.reply('Seems like there is a video stream going on...')
     audio = (message.reply_to_message.audio or message.reply_to_message.voice) if message.reply_to_message else None
+    try:
+      group_call = await mp.call(message.chat.id)
+    except RuntimeError:
+        return await message.reply_text('The vc seems to be off.....')
+    except ChannelInvalid:
+        return await message.reply_text('Seems like my assistant is not in the chat!')
+    except Exception as e:
+        return await message.reply_text(f'{type(e).__name__}: {e}')
     req_name = f"Requested By: {message.from_user.first_name}\n"
     req_user = f"Requested By: [{message.from_user.first_name}](tg://user?id={message.from_user.id})\n"
     url = get_url(message)
@@ -255,15 +271,9 @@ async def play(_, message: Message):
         global quu
         try:
           quu[message.chat.id].append(ruuta)
-        except KeyError:
-          m = erro(message.chat.id, file_path, ruuta)
-          if m is True:
-            await m.delete()
-            await message.reply(text, reply_markup = markup)
-            return 
-          else: 
-            await message.reply("Ahh!! Looks like some error occurred, check if vc is on")
-            return
+        except Exception:
+          sql.set_off(message.chat.id)
+          await message.reply_text('Ahk! sorry, try again!')
         text += f"**\nQueued at position #{await callsmusic.queues.put(message.chat.id, file_path=file_path)} !**"
         await m.delete()
         m = await message.reply_text(text, parse_mode = "md", reply_markup = markup) 
@@ -271,10 +281,11 @@ async def play(_, message: Message):
         await m.delete() 
     else:
         try: 
-          callsmusic.pytgcalls.join_group_call(message.chat.id, file_path, 48000)
-        except Exception:
+          group_call.input_filename = file_path
+        except Exception as e:
+          print(e)
           await m.delete()
-          await message.reply("Looks like the group vc call is not on")
+          await message.reply(e)
           return 
         sql.set_on(message.chat.id)
         await m.delete()

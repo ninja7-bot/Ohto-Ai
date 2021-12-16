@@ -4,22 +4,40 @@ from sql import calls as sql
 from pyrogram import Client, filters 
 from pyrogram.types import Message, Chat, User
 import callsmusic
+from callsmusic import mp, quu, block_chat, FFMPEG_PRO
+from callsmusic import client as player
 from pyrogram.errors import PeerIdInvalid
+from pyrogram.errors import exceptions as pexc
 from sql import auth as ats
 from config import BOT_NAME as BN
 from config import SUDO_USERS
 from helpers.filters import command, other_filters
 from helpers.decorators import errors, authorized_users_only, authorized_users_only2
-from handlers.play import quu 
 from config import BOT_USERNAME
-from config import PLAY_PIC 
+from config import PLAY_PIC, SUMMONER
 from config import UBOT_ID as ubot
+import signal
+
+def mention(name, userid):
+  return f"[{name}](tg://user?id={userid})"
 
 @Client.on_message(filters.command(["summon", f"summon@{BOT_USERNAME}"]))
 @authorized_users_only2
 async def summon(client: Client, message: Message): 
-  m = message.reply("Yea well, waitto, will take some time!")
-  await joinchatto(int(message.chat.id))
+  if not SUMMONER == 'False':
+    await message.reply_text('Sorry, this is a private music bot!')
+    return
+  m = await message.reply_text("Yea well, waitto, will take some time!")
+  try:
+    hek = message.chat.username
+    if  hek == None:
+      hek = await client.export_chat_invite_link(message.chat.id)
+  except BaseException:
+    return await message.reply_text('Ahk! Looks like im not admin and the chat is private!')
+  try:
+    await player.join_chat(hek)
+  except pexc.bad_request_400.UserAlreadyParticipant:
+    return await m.edit('Userbot is here!')
   await m.edit("Summon Successfull! Now enjoy playing!")
 
 @Client.on_message(filters.command(["ping", f"ping@{BOT_USERNAME}"]))
@@ -43,9 +61,11 @@ async def res(_, message: Message):
     sql.set_off(message.chat.id)
   quu[message.chat.id] = []
   try: 
-    callsmusic.pytgcalls.leave_group_call(message.chat.id) 
+    await mp.leave(message.chat.id)
   except Exception:
     pass
+  if message.chat.id in block_chat:
+    block_chat.remove(message.chat.id)
   await message.reply("**Reset successful..!!!**")
 
 @Client.on_message(filters.command(["auth", f"auth@{BOT_USERNAME}"]) & other_filters)
@@ -62,22 +82,38 @@ async def aut(_, message: Message):
     ats.approve(message.chat.id, reply.id)
     return await message.reply(f"[{reply.first_name}](tg://user?id={reply.id}) was authorized in {message.chat.title}")
 
+async def meme_get(chat: Chat, user): 
+  return await chat.get_member(user)
+
 @Client.on_message(filters.command(["remauth", f"remauth@{BOT_USERNAME}"]) & other_filters)
 @errors 
 @authorized_users_only 
 async def remauth(_, message: Message): 
   reply = message.reply_to_message
   if not reply: 
-    return await message.reply("Reply To a user to unauthorize.. ")
-  user = reply.from_user
-  if ats.is_approved(message.chat.id, user.id):
-    ats.disapprove(message.chat.id, user.id)
-    await message.reply(f"[{user.first_name}](tg://user?id={user.id}) was removed from authorized list..")
+    user = message.text[8:] 
+    if user == '':
+      return await message.reply("Reply To a user or use the user id to unauthorize.. ")
+  else:
+    user = reply.from_user.id
+  if ats.is_approved(message.chat.id, user):
+    ats.disapprove(message.chat.id, user)
+    try:
+      meme = await meme_get(message.chat, int(user))
+    except PeerIdInvalid:
+      meme = False
+    text = "{} was unauthorized in {}"
+    if not meme == False:
+      kek = mention(meme.user['first_name'], user)
+      text = text.format(kek, message.chat.title)
+      await message.reply(text) 
+    else:
+      hek = f"`{user}` (I hadn't met this user in pm)"
+      text= text.format(hek, message.chat.title)
+      await message.reply(text)
   else: 
-    return await message.reply(f"[{user.first_name}](tg://user?id={user.id}) is already not authorized..")
+    return await message.reply("This user is already not authorized..")
 
-async def meme_get(chat: Chat, user): 
-  return await chat.get_member(user)
 
 
 @Client.on_message(filters.command(["listauth", f"listauth@{BOT_USERNAME}"]) & other_filters)
@@ -109,12 +145,12 @@ async def listauth(chat: Chat, message: Message):
 async def pause(_, message: Message):
     if not sql.is_call(message.chat.id):
       return await message.reply("Nuthin playin.... ")
-    if callsmusic.pytgcalls.active_calls[message.chat.id] == 'paused':
-        await message.reply_text("Nuthin playing already right now..", parse_mode ="md")
-    else:
-        callsmusic.pytgcalls.pause_stream(message.chat.id)
-        await message.reply_text("Paused.. hek....", parse_mode = "md")
-
+    group_call = await mp.call(message.chat.id)
+    try:
+      group_call.pause_playout()
+      await message.reply_text('Paused! hek!')
+    except Exception:
+      await message.reply_text('Could not!!')
 
 @Client.on_message(filters.command(["resume", f"resume@{BOT_USERNAME}"]) & other_filters)
 @errors
@@ -122,17 +158,29 @@ async def pause(_, message: Message):
 async def resume(_, message: Message):
     if not sql.is_call(message.chat.id):
       return await message.reply("Nuthin playin...")
-    if callsmusic.pytgcalls.active_calls[message.chat.id] == 'playing':
-        await message.reply_text("Already playing!!", parse_mode = "md")
-    else:
-        callsmusic.pytgcalls.resume_stream(message.chat.id)
-        await message.reply_text("Ahh Party On Again.... yay!!", parse_mode = "md")
+    group_call = await mp.call(message.chat.id)
+    try:
+      group_call.resume_playout()
+      await message.reply_text('Resumed!')
+    except Exception:
+      await message.reply_text('Could Not!')
 
 
 @Client.on_message(filters.command(["stop", f"stop@{BOT_USERNAME}"]) & other_filters)
 @errors
 @authorized_users_only
 async def stop(_, message: Message):
+    if message.chat.id in FFMPEG_PRO:
+      proc = FFMPEG_PRO.get(message.chat.id)
+      proc.send_signal(signal.SIGTERM)
+      try:
+        os.remove(f'streamat{message.chat.id}')
+      except Exception:
+        pass
+    if message.chat.id in block_chat:
+      await mp.leave(message.chat.id)
+      block_chat.remove(message.chat.id)
+      return await message.reply_text('Stopped streaming....')
     if not sql.is_call(message.chat.id):
         await message.reply_text("Nuthin Streamin'....... ig so.. ", parse_mode = "md")
     else:
@@ -141,7 +189,7 @@ async def stop(_, message: Message):
         except QueueEmpty: 
           pass 
         quu[message.chat.id] = []
-        callsmusic.pytgcalls.leave_group_call(message.chat.id)
+        await mp.leave(message.chat.id)
         sql.set_off(message.chat.id)
         await message.reply_text(f"Ahh, its peaceful now, Byee[...]({PLAY_PIC})", parse_mode = "md")
 
@@ -150,11 +198,13 @@ async def stop(_, message: Message):
 @errors
 @authorized_users_only2
 async def skip(_, message: Message):
+    if message.chat.id in block_chat:
+      return await message.reply_text('Cant skip video stream...')
     if not sql.is_call(message.chat.id):
       return await message.reply("Baka nothing to skip..!")
     if callsmusic.queues.is_empty(message.chat.id):
       try:
-        callsmusic.pytgcalls.leave_group_call(message.chat.id) 
+        await mp.leave(message.chat.id)
         sql.set_off(message.chat.id)
       except Exception:
         pass
@@ -171,15 +221,13 @@ async def skip(_, message: Message):
           pass
         if callsmusic.queues.is_empty(message.chat.id):
             nex_song = " "
-            callsmusic.pytgcalls.leave_group_call(message.chat.id)
+            await mp.leave(message.chat.id)
             sql.set_off(message.chat.id)
         else:
             try:
               nex_song = "**Now playin: " + why[0] + "**"
             except IndexError:
               nex_song = " "
-            callsmusic.pytgcalls.change_stream(
-                message.chat.id,
-                callsmusic.queues.get(message.chat.id)["file_path"])
-
+            gp = await mp.call(message.chat.id)
+            gp.input_filename = callsmusic.queues.get(message.chat.id)["file_path"]
         await message.reply_text(f"Skipped....!\n{nex_song}", parse_mode = "md")

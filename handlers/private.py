@@ -22,7 +22,7 @@ async def start(_, message: Message):
                     InlineKeyboardButton(
                         "Deploy me", url="https://heroku.com/deploy?template=https://github.com/Zack-Bloodshot/Ohto-Ai"
                     )],[
-                    InlineKeyboardButton(text = "Creator", url = "https://t.me/DontKnowWhoRU"), InlineKeyboardButton(text = "Repo", url = "https://github.com/Zack-Bloodshot/Ohto-Ai")]
+                    InlineKeyboardButton(text = "Creator", url = "https://t.me/HeyDoUKnowMe"), InlineKeyboardButton(text = "Repo", url = "https://github.com/Zack-Bloodshot/Ohto-Ai")]
             ]
         )
     )
@@ -49,6 +49,7 @@ async def a(client, message: Message):
       "geo-bypass": True,
       "nocheckcertificate": True,
       "outtmpl": "%(id)s.mp3",
+      'forceip' : 4,
     }
     try:
         results = []
